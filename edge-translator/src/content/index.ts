@@ -49,8 +49,10 @@ chrome.runtime.onMessage.addListener(
   if (message.type === 'TRANSLATE_DONE') {
     if (state) {
       state.bar.complete(state.truncated);
-      state.bar.addButton('恢复原文', () => restoreOriginal());
       state.translating = false;
+      const bar = state.bar;
+      // 完成后短暂展示，数秒后自动关闭（恢复原文仍可在弹窗中操作）
+      setTimeout(() => bar.remove(), 3000);
     }
     return;
   }
