@@ -54,8 +54,8 @@ if (!g.__eatInjected) {
           state.bar.complete(state.truncated);
           state.translating = false;
           const bar = state.bar;
-          // 完成后短暂展示，数秒后自动关闭（恢复原文仍可在弹窗中操作）
-          setTimeout(() => bar.remove(), 3000);
+          // 完成 1 秒后淡出消失（恢复原文仍可在弹窗中操作）
+          setTimeout(() => bar.fadeOut(), 1000);
         }
         return false;
       }

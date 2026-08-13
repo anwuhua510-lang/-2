@@ -380,6 +380,8 @@ async function save(): Promise<void> {
   await saveSettings(settings);
   chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED', settings }).catch(() => {});
   setStatus('已保存 ' + new Date().toLocaleTimeString());
+  // 保存成功后自动关闭设置页
+  setTimeout(() => window.close(), 500);
 }
 
 function setStatus(message: string, isError = false): void {

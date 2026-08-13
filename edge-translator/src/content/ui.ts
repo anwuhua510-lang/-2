@@ -27,6 +27,11 @@ function injectStyle(): void {
       font: 13px/1.4 system-ui, "Microsoft YaHei", sans-serif;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
       max-width: 90vw;
+      opacity: 1;
+      transition: opacity 0.4s ease;
+    }
+    #eat-translation-bar.eat-fade-out {
+      opacity: 0;
     }
     #eat-translation-bar.eat-error {
       background: #7f1d1d;
@@ -103,6 +108,12 @@ export class TranslationBar {
     this.text.textContent = truncated
       ? '翻译完成（部分内容超过上限未翻译）'
       : '翻译完成';
+  }
+
+  /** 淡出后自动移除 */
+  fadeOut(): void {
+    this.bar.classList.add('eat-fade-out');
+    setTimeout(() => this.bar.remove(), 400);
   }
 
   fail(error: TranslationError): void {
