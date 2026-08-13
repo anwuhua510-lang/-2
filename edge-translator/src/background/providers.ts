@@ -211,27 +211,112 @@ async function classifyHttpError(response: Response): Promise<ProviderCallError>
 }
 
 function parseSegments(text: string): SegmentTranslation[] {
-  const cleaned = text
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '');
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new ProviderCallError('invalid_response', '模型返回不是合法 JSON');
+  const parsed = parseJsonLoose(text);
+  if (parsed === undefined) {
+    throw new ProviderCallError(
+      'invalid_response',
+      `模型返回不是合法 JSON（原始内容：${snippet(text, 120)}）`,
+    );
   }
 
-  if (!Array.isArray(parsed)) {
-    throw new ProviderCallError('invalid_response', '模型返回不是 JSON 数组');
+  const list = unwrapList(parsed);
+  if (list === undefined) {
+    throw new ProviderCallError(
+      'invalid_response',
+      `模型返回不是 JSON 数组（原始内容：${snippet(text, 120)}）`,
+    );
   }
 
-  return parsed.map((item, index) => {
+  return list.map((item, index) => {
     const obj = (item ?? {}) as Record<string, unknown>;
     return {
       id: typeof obj.id === 'string' ? obj.id : String(index),
       text: typeof obj.text === 'string' ? obj.text : '',
     };
   });
+}
+
+function snippet(text: string, length: number): string {
+  const compact = text.replace(/\s+/g, ' ').trim();
+  return compact.length > length ? compact.slice(0, length) + '…' : compact;
+}
+
+/**
+ * 宽松解析：先按原样 JSON.parse；失败则从文本中提取第一个完整的
+ * JSON 对象或数组（容忍模型在 JSON 前后附加说明文字）。
+ */
+function parseJsonLoose(text: string): unknown {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '');
+  if (!cleaned) return undefined;
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return extractJsonValue(cleaned);
+  }
+}
+
+function extractJsonValue(text: string): unknown {
+  const starts = [text.indexOf('{'), text.indexOf('[')]
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b);
+
+  for (const start of starts) {
+    const open = text[start];
+    const close = open === '{' ? '}' : ']';
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = start; i < text.length; i++) {
+      const char = text[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+      if (char === open) {
+        depth += 1;
+      } else if (char === close) {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            return JSON.parse(text.slice(start, i + 1));
+          } catch {
+            break;
+          }
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * 接受数组，或常见的对象包装（translations/segments/result/data/items），
+ * 以及单个 {id,text} 对象（视为单元素数组）。
+ */
+function unwrapList(value: unknown): unknown[] | undefined {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.id === 'string' && typeof record.text === 'string') {
+      return [record];
+    }
+    for (const key of ['translations', 'segments', 'result', 'data', 'items']) {
+      if (Array.isArray(record[key])) return record[key];
+    }
+  }
+  return undefined;
 }
