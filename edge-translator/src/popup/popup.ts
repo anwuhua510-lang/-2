@@ -107,6 +107,7 @@ async function translateActiveTab(): Promise<void> {
       type: 'POPUP_COMMAND',
       command: 'translate',
     } satisfies PopupCommandMessage);
+    window.close();
   } catch {
     showHint('翻译指令发送失败，请刷新页面后重试。');
   }
@@ -130,6 +131,24 @@ async function restoreActiveTab(): Promise<void> {
  * chrome.scripting 动态注入（依赖点击扩展图标授予的 activeTab 权限）。
  */
 async function ensureContentScript(tabId: number): Promise<boolean> {
+  if (await probeContentScript(tabId)) return true;
+
+  try {
+    await chrome.runtime.sendMessage({ type: 'INJECT_CONTENT', tabId });
+  } catch {
+    return false;
+  }
+
+  // content script 通过动态 import 加载主模块，监听器注册有延迟；
+  // 轮询等待其就绪（最长约 2.5 秒），避免指令发到空接收端。
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (await probeContentScript(tabId)) return true;
+    await sleep(250);
+  }
+  return false;
+}
+
+async function probeContentScript(tabId: number): Promise<boolean> {
   try {
     await chrome.tabs.sendMessage(tabId, {
       type: 'POPUP_COMMAND',
@@ -137,12 +156,7 @@ async function ensureContentScript(tabId: number): Promise<boolean> {
     } satisfies PopupCommandMessage);
     return true;
   } catch {
-    try {
-      await chrome.runtime.sendMessage({ type: 'INJECT_CONTENT', tabId });
-      return true;
-    } catch {
-      return false;
-    }
+    return false;
   }
 }
 
@@ -161,6 +175,10 @@ function showHint(message: string): void {
 function hideHint(): void {
   const hint = document.getElementById('popup-hint');
   if (hint) hint.hidden = true;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function persist(): Promise<void> {
