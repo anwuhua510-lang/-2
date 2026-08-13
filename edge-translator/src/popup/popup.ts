@@ -153,6 +153,9 @@ async function ensureContentScript(tabId: number): Promise<string | null> {
   }
 
   if (!response.ok) {
+    if ('received' in (response as object)) {
+      return '检测到扩展仍是旧版本：请到 edge://extensions 刷新扩展，并确认弹窗底部显示 v0.1.1 后再试。';
+    }
     const error = response.error ?? response.raw ?? '';
     if (
       error.includes('Cannot access') ||
