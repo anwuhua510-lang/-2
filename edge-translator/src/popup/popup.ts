@@ -98,8 +98,9 @@ async function translateActiveTab(): Promise<void> {
   hideHint();
   const tabId = await getActiveTabId();
   if (tabId === undefined) return;
-  if (!(await ensureContentScript(tabId))) {
-    showHint('当前页面无法翻译：请刷新页面后重试（部分内置页面不支持扩展）。');
+  const reason = await ensureContentScript(tabId);
+  if (reason) {
+    showHint(reason);
     return;
   }
   try {
@@ -130,22 +131,41 @@ async function restoreActiveTab(): Promise<void> {
  * 确保 content script 已注入：先探测，失败则请求 background 用
  * chrome.scripting 动态注入（依赖点击扩展图标授予的 activeTab 权限）。
  */
-async function ensureContentScript(tabId: number): Promise<boolean> {
-  if (await probeContentScript(tabId)) return true;
+/**
+ * 确保 content script 可用。返回 null 表示就绪；否则返回面向用户的失败原因。
+ */
+async function ensureContentScript(tabId: number): Promise<string | null> {
+  if (await probeContentScript(tabId)) return null;
 
+  let response: { ok?: boolean; error?: string };
   try {
-    await chrome.runtime.sendMessage({ type: 'INJECT_CONTENT', tabId });
+    response = (await chrome.runtime.sendMessage({
+      type: 'INJECT_CONTENT',
+      tabId,
+    })) as { ok?: boolean; error?: string };
   } catch {
-    return false;
+    return '无法连接扩展后台，请刷新页面后重试。';
+  }
+
+  if (!response.ok) {
+    const error = response.error ?? '';
+    if (
+      error.includes('Cannot access') ||
+      error.includes('cannot be accessed') ||
+      error.includes('No host permissions')
+    ) {
+      return '当前页面不支持扩展（内置页面或受限页面），请换一个普通网页，或刷新后重试。';
+    }
+    return `页面注入失败：${error}。请刷新页面后重试。`;
   }
 
   // content script 通过动态 import 加载主模块，监听器注册有延迟；
-  // 轮询等待其就绪（最长约 2.5 秒），避免指令发到空接收端。
-  for (let attempt = 0; attempt < 10; attempt++) {
-    if (await probeContentScript(tabId)) return true;
+  // 轮询等待其就绪（最长约 5 秒），避免指令发到空接收端。
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (await probeContentScript(tabId)) return null;
     await sleep(250);
   }
-  return false;
+  return '页面脚本加载超时，请刷新页面后重试。';
 }
 
 async function probeContentScript(tabId: number): Promise<boolean> {
