@@ -48,23 +48,31 @@ async function callGemini(
   signal?: AbortSignal,
 ): Promise<ProviderResult> {
   const baseUrl = (provider.baseUrl ?? DEFAULT_ENDPOINTS.gemini).replace(/\/+$/, '');
-  const url =
-    `${baseUrl}/models/${encodeURIComponent(provider.model)}:generateContent` +
-    `?key=${encodeURIComponent(provider.apiKey)}`;
-
-  const response = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const modelPath = `models/${encodeURIComponent(provider.model)}:generateContent`;
+  const body = JSON.stringify({
       systemInstruction: { parts: [{ text: prompt.system }] },
       contents: [{ role: 'user', parts: [{ text: prompt.user }] }],
       generationConfig: {
         temperature: 0.2,
         responseMimeType: 'application/json',
       },
-    }),
-    signal,
-  });
+    });
+  const jsonHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+
+  // 优先用 ?key= 查询参数；若返回 401（部分新格式 AQ. key 的兼容问题），
+  // 改用 x-goog-api-key 请求头重试一次。
+  let response = await fetchWithTimeout(
+    `${baseUrl}/${modelPath}?key=${encodeURIComponent(provider.apiKey)}`,
+    { method: 'POST', headers: jsonHeaders, body, signal },
+  );
+  if (response.status === 401) {
+    response = await fetchWithTimeout(`${baseUrl}/${modelPath}`, {
+      method: 'POST',
+      headers: { ...jsonHeaders, 'x-goog-api-key': provider.apiKey },
+      body,
+      signal,
+    });
+  }
 
   if (!response.ok) throw await classifyHttpError(response);
 

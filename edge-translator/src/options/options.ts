@@ -1,5 +1,6 @@
 import './options.css';
 import { getSettings, saveSettings } from '../shared/storage';
+import { callProvider } from '../background/providers';
 import type {
   ExtensionSettings,
   GlossaryEntry,
@@ -203,9 +204,47 @@ function renderProviders(): void {
       provider.baseUrl = value || undefined;
     });
     body.append(model, key, base);
+
+    const footer = document.createElement('div');
+    footer.className = 'provider-footer';
+    const status = document.createElement('span');
+    status.className = 'test-status';
+    const testButton = actionButton('测试连接', '验证 key 与模型是否可用', () => {
+      void testProvider(provider, status);
+    });
+    footer.append(testButton, status);
+
     row.appendChild(body);
+    row.appendChild(footer);
     container.appendChild(row);
   });
+}
+
+async function testProvider(
+  provider: ProviderConfig,
+  status: HTMLSpanElement,
+): Promise<void> {
+  status.textContent = '测试中…';
+  status.className = 'test-status';
+  try {
+    const result = await callProvider(
+      provider,
+      [{ id: '0', text: 'Hello, world' }],
+      'en',
+      'zh-CN',
+      [],
+    );
+    const translated = result.segments[0]?.text ?? '';
+    status.textContent = `✓ 连接成功：${translated}`;
+    status.className = 'test-status ok';
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+    status.textContent = `✗ ${message}`;
+    status.className = 'test-status err';
+  }
 }
 
 function renderGlossary(): void {

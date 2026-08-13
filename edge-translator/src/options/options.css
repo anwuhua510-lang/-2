@@ -131,6 +131,27 @@ input[type="number"],
   gap: 8px;
 }
 
+.provider-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.test-status {
+  font-size: 12px;
+  color: #6b7280;
+  overflow-wrap: anywhere;
+}
+
+.test-status.ok {
+  color: #16a34a;
+}
+
+.test-status.err {
+  color: #dc2626;
+}
+
 .glossary-row {
   display: grid;
   grid-template-columns: 1.2fr 1.2fr 0.8fr auto;
