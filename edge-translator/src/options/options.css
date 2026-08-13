@@ -1,0 +1,14 @@
+body {
+  font-family: system-ui, "Microsoft YaHei", sans-serif;
+  margin: 0;
+}
+
+.options {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.hint {
+  color: #888;
+}
