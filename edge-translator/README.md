@@ -38,6 +38,20 @@
 ]
 ```
 
+## 常见问题
+
+### Gemini 报 403 "Your project has been denied access"
+
+Google 可能因账号、地区或代理出口 IP 拒绝访问（新注册账号或代理出口地区不受支持时常见），插件侧无法修复。
+
+解决办法：改用 OpenAI 兼容引擎（如 Groq）作为主力——
+
+1. 到 [console.groq.com](https://console.groq.com) 免费注册并创建一个 API key（无需信用卡）。
+2. 扩展设置 → 添加"OpenAI 兼容"引擎：模型填 `llama-3.3-70b-versatile`，endpoint 留空（默认 `https://api.groq.com/openai/v1`），填入 key。
+3. 点"测试连接"确认，然后把它移到列表第一位作为默认引擎。
+
+Gemini 引擎可以保留，等 Google 放行后自动作为备用。
+
 ## 目录结构
 
 ```text
