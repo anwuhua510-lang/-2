@@ -125,12 +125,15 @@ user: [{ "id": "...", "text": "..." }, ...]
 | `rate_limited` | HTTP 429 | 等待后重试（计入重试次数），仍失败则轮换下一个 provider |
 | `quota_exhausted` | 403 且提示额度/quota | 不重试，直接轮换下一个 provider |
 | `auth_failed` | 401 / 403 key 无效 | 不重试，提示"key 无效"，尝试下一个 provider |
+| `config_error` | 未配置可用 key | 不重试，提示到设置页添加 key |
 | `network` / `timeout` | 连接失败 / 超时 | 指数退避重试（最多 3 次） |
 | `server_error` | 5xx | 指数退避重试（最多 3 次） |
 | `invalid_response` | 解析失败 | 重试 1 次；仍失败则报错 |
 | `cancelled` | 用户恢复原文/切换页面 | 静默终止 |
 
 轮换规则：当前 provider 的 key 触发额度类错误时，把该条目移到列表尾部并选下一个可用条目；当前生效的 provider 名称在 popup 展示。
+
+注意：provider 列表与 key 只由 service worker 从 `chrome.storage.local` 读取，content script 不接触 key；`TRANSLATE_PAGE` 只携带片段与语言/术语表快照。
 
 ## 8. 翻译范围与过滤规则（M3 实现）
 

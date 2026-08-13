@@ -96,6 +96,7 @@ export type TranslationErrorKind =
   | 'rate_limited' // 429：可等待重试或轮换
   | 'quota_exhausted' // 额度用尽：轮换 key
   | 'auth_failed' // 401/403：key 无效
+  | 'config_error' // 未配置可用 key / 配置缺失
   | 'network' // 连接失败
   | 'timeout'
   | 'server_error' // 5xx
