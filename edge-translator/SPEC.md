@@ -73,7 +73,8 @@ interface ExtensionSettings {
   masterEnabled: boolean;                   // 默认 false（不自动翻译）
   autoRetry: boolean;                       // 默认 true
   maxTextBlocksPerPage: number;             // 默认 500
-  maxCharsPerRequest: number;               // 默认 4000
+  maxCharsPerRequest: number;               // 默认 1500
+  maxSegmentsPerRequest: number;            // 默认 25
   maxRetries: number;                       // 默认 3
   proxy: ProxySettings;                     // 自定义 endpoint 开关
 }
@@ -141,7 +142,7 @@ user: [{ "id": "...", "text": "..." }, ...]
 - 跳过隐藏元素（`display:none`、`visibility:hidden`、`[hidden]`、宽高为 0）。
 - 链接：翻译可见文字，`href` 与 `title` 属性不翻译。
 - `input` 的 `placeholder` 翻译，`value` 不翻译。
-- 按 DOM 顺序把连续短文本聚合成文本块；单块超过 `maxCharsPerRequest` 时再拆分。
+- 按 DOM 顺序把连续短文本聚合成文本块；同时受 `maxCharsPerRequest`（1500 字符）与 `maxSegmentsPerRequest`（25 段）双重上限约束，避免单次请求过大导致模型输出截断。
 - 单页最多处理 `maxTextBlocksPerPage`（500）块，超出部分提示"部分内容未翻译"。
 - 译文替换到 DOM 后，把块标记为已翻译；恢复时按内存映射还原，不刷新页面。
 

@@ -57,6 +57,9 @@ function renderAll(): void {
   (document.getElementById('max-chars') as HTMLInputElement).value = String(
     settings.maxCharsPerRequest,
   );
+  (document.getElementById('max-segments') as HTMLInputElement).value = String(
+    settings.maxSegmentsPerRequest,
+  );
   (document.getElementById('max-retries') as HTMLInputElement).value = String(
     settings.maxRetries,
   );
@@ -76,6 +79,7 @@ function bindGlobalControls(): void {
   };
   setNumber('max-blocks', (v) => (settings.maxTextBlocksPerPage = v));
   setNumber('max-chars', (v) => (settings.maxCharsPerRequest = v));
+  setNumber('max-segments', (v) => (settings.maxSegmentsPerRequest = v));
   setNumber('max-retries', (v) => (settings.maxRetries = v));
 
   (document.getElementById('target-language') as HTMLSelectElement).addEventListener(

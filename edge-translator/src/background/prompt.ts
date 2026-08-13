@@ -39,7 +39,7 @@ export function buildPrompt(input: {
   const system = [
     `你是一名专业翻译。请把用户提供的 JSON 数组中的每段文本，从「${LANGUAGE_NAMES[sourceLanguage]}」翻译成「${LANGUAGE_NAMES[targetLanguage]}」。`,
     '规则：',
-    '1. 严格按输入顺序输出 JSON 数组，格式为 [{"id":"...","text":"..."}]，只输出 JSON，不要输出任何其他内容。',
+    '1. 严格按输入顺序输出 JSON 数组，格式为 [{"id":"...","text":"..."}]，输出条目必须与输入完全一致，不得省略、合并或新增条目；只输出 JSON，不要输出任何其他内容。',
     '2. 代码、链接地址、数字、专有名词、变量名、文件名不得翻译或改动。',
     '3. 保留原文的换行与空行。',
     glossaryLines.length > 0

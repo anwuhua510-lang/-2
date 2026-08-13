@@ -59,6 +59,7 @@ export interface ExtensionSettings {
   autoRetry: boolean;
   maxTextBlocksPerPage: number;
   maxCharsPerRequest: number;
+  maxSegmentsPerRequest: number;
   maxRetries: number;
   proxy: ProxySettings;
 }
@@ -72,7 +73,8 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   masterEnabled: false,
   autoRetry: true,
   maxTextBlocksPerPage: 500,
-  maxCharsPerRequest: 4000,
+  maxCharsPerRequest: 1500,
+  maxSegmentsPerRequest: 25,
   maxRetries: 3,
   proxy: { enabled: false },
 };

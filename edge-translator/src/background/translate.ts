@@ -13,6 +13,11 @@ import { getSettings, saveSettings } from './settings';
 
 const activeRuns = new Map<number, AbortController>();
 
+interface RuntimeState {
+  providerIndex: number;
+  lastUsedProvider?: ProviderConfig;
+}
+
 export function sendToTab(tabId: number, message: RuntimeMessage): void {
   chrome.tabs
     .sendMessage(tabId, message)
@@ -54,11 +59,14 @@ export async function handleTranslatePage(
     return;
   }
 
-  const chunks = chunkSegments(request.segments, settings.maxCharsPerRequest);
+  const chunks = chunkSegments(
+    request.segments,
+    settings.maxCharsPerRequest,
+    settings.maxSegmentsPerRequest,
+  );
   const results: SegmentTranslation[] = [];
   const usage = { inputTokens: 0, outputTokens: 0 };
-  let providerIndex = 0;
-  let lastUsedProvider: ProviderConfig | undefined;
+  const runtime: RuntimeState = { providerIndex: 0 };
 
   for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
     if (controller.signal.aborted) {
@@ -70,83 +78,32 @@ export async function handleTranslatePage(
       type: 'TRANSLATE_PROGRESS',
       done: chunkIndex,
       total: chunks.length,
-      providerName: providers[providerIndex % providers.length].name,
+      providerName:
+        providers[runtime.providerIndex % providers.length].name,
     });
 
-    let ok = false;
-    let attempts = 0;
-    let lastError: TranslationError = {
-      kind: 'network',
-      message: '未知错误',
-      retryable: false,
-    };
-    const attemptBudget = settings.maxRetries + providers.length;
-
-    while (attempts < attemptBudget && !ok) {
-      const provider = providers[providerIndex % providers.length];
-      attempts += 1;
-      try {
-        const result = await callProvider(
-          provider,
-          chunks[chunkIndex],
-          request.sourceLanguage,
-          request.targetLanguage,
-          request.glossary,
-          controller.signal,
-        );
-        if (!isCompleteChunk(chunks[chunkIndex], result.segments)) {
-          throw new ProviderCallError(
-            'invalid_response',
-            '模型返回的段落数量不完整',
-          );
-        }
-        results.push(...result.segments);
-        lastUsedProvider = provider;
-        usage.inputTokens += result.usage?.inputTokens ?? 0;
-        usage.outputTokens += result.usage?.outputTokens ?? 0;
-        sendToTab(tabId, {
-          type: 'TRANSLATE_CHUNK',
-          segments: result.segments,
-        });
-        ok = true;
-      } catch (error) {
-        const providerError =
-          error instanceof ProviderCallError
-            ? error
-            : new ProviderCallError('invalid_response', String(error));
-        lastError = {
-          kind: providerError.kind,
-          message: providerError.message,
-          retryable: isRetryable(providerError.kind, settings.autoRetry),
-        };
-
-        if (providerError.kind === 'cancelled') {
-          activeRuns.delete(tabId);
-          return;
-        }
-
-        if (
-          providerError.kind === 'quota_exhausted' ||
-          providerError.kind === 'auth_failed'
-        ) {
-          providerIndex = (providerIndex + 1) % providers.length;
-          await rotateProviderToEnd(settings, provider);
-          continue;
-        }
-
-        if (providerError.kind === 'rate_limited') {
-          providerIndex = (providerIndex + 1) % providers.length;
-          await sleep(1000);
-          continue;
-        }
-
-        if (!settings.autoRetry) break;
-        await sleep(backoffMs(attempts));
-      }
-    }
-
-    if (!ok) {
-      sendToTab(tabId, { type: 'TRANSLATE_FAILED', error: lastError });
+    try {
+      const translated = await translateChunkRecursive({
+        segments: chunks[chunkIndex],
+        providers,
+        settings,
+        request,
+        controller,
+        runtime,
+        depth: 0,
+      });
+      results.push(...translated.segments);
+      usage.inputTokens += translated.usage?.inputTokens ?? 0;
+      usage.outputTokens += translated.usage?.outputTokens ?? 0;
+      sendToTab(tabId, {
+        type: 'TRANSLATE_CHUNK',
+        segments: translated.segments,
+      });
+    } catch (error) {
+      sendToTab(tabId, {
+        type: 'TRANSLATE_FAILED',
+        error: toTranslationError(error, settings.autoRetry),
+      });
       activeRuns.delete(tabId);
       return;
     }
@@ -156,7 +113,7 @@ export async function handleTranslatePage(
     sendToTab(tabId, {
       type: 'TRANSLATE_DONE',
       result: {
-        providerId: lastUsedProvider?.id ?? '',
+        providerId: runtime.lastUsedProvider?.id ?? '',
         segments: results,
         usage,
       },
@@ -165,9 +122,130 @@ export async function handleTranslatePage(
   activeRuns.delete(tabId);
 }
 
+interface ChunkParams {
+  segments: TranslationSegment[];
+  providers: ProviderConfig[];
+  settings: ExtensionSettings;
+  request: TranslationRequest;
+  controller: AbortController;
+  runtime: RuntimeState;
+  depth: number;
+}
+
+interface ChunkResult {
+  segments: SegmentTranslation[];
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+  };
+}
+
+/**
+ * 递归翻译一个块：优先整块发送；若模型返回不完整（截断/漏段），
+ * 自动拆成两半分别重试，最多拆两层，保证长列表也能完整翻译。
+ */
+async function translateChunkRecursive(
+  params: ChunkParams,
+): Promise<ChunkResult> {
+  try {
+    return await translateChunkWithRetries(params);
+  } catch (error) {
+    const isIncomplete =
+      error instanceof ProviderCallError &&
+      error.kind === 'invalid_response' &&
+      params.segments.length > 1 &&
+      params.depth < 2;
+    if (!isIncomplete) throw error;
+
+    const mid = Math.ceil(params.segments.length / 2);
+    const left = await translateChunkRecursive({
+      ...params,
+      segments: params.segments.slice(0, mid),
+      depth: params.depth + 1,
+    });
+    const right = await translateChunkRecursive({
+      ...params,
+      segments: params.segments.slice(mid),
+      depth: params.depth + 1,
+    });
+    return {
+      segments: [...left.segments, ...right.segments],
+      usage: {
+        inputTokens:
+          (left.usage?.inputTokens ?? 0) + (right.usage?.inputTokens ?? 0),
+        outputTokens:
+          (left.usage?.outputTokens ?? 0) + (right.usage?.outputTokens ?? 0),
+      },
+    };
+  }
+}
+
+async function translateChunkWithRetries(
+  params: ChunkParams,
+): Promise<ChunkResult> {
+  const { segments, providers, settings, request, controller, runtime } = params;
+  const attemptBudget = settings.maxRetries + providers.length;
+  let attempts = 0;
+  let lastError: ProviderCallError = new ProviderCallError(
+    'network',
+    '未知错误',
+  );
+
+  while (attempts < attemptBudget) {
+    const provider = providers[runtime.providerIndex % providers.length];
+    attempts += 1;
+    try {
+      const result = await callProvider(
+        provider,
+        segments,
+        request.sourceLanguage,
+        request.targetLanguage,
+        request.glossary,
+        controller.signal,
+      );
+      if (!isCompleteChunk(segments, result.segments)) {
+        throw new ProviderCallError(
+          'invalid_response',
+          '模型返回的段落数量不完整',
+        );
+      }
+      runtime.lastUsedProvider = provider;
+      return result;
+    } catch (error) {
+      lastError =
+        error instanceof ProviderCallError
+          ? error
+          : new ProviderCallError('invalid_response', String(error));
+
+      if (lastError.kind === 'cancelled') throw lastError;
+
+      if (
+        lastError.kind === 'quota_exhausted' ||
+        lastError.kind === 'auth_failed'
+      ) {
+        runtime.providerIndex = (runtime.providerIndex + 1) % providers.length;
+        await rotateProviderToEnd(settings, provider);
+        continue;
+      }
+
+      if (lastError.kind === 'rate_limited') {
+        runtime.providerIndex = (runtime.providerIndex + 1) % providers.length;
+        await sleep(1000);
+        continue;
+      }
+
+      if (!settings.autoRetry) throw lastError;
+      await sleep(backoffMs(attempts));
+    }
+  }
+
+  throw lastError;
+}
+
 export function chunkSegments(
   segments: TranslationSegment[],
   maxChars: number,
+  maxSegments: number,
 ): TranslationSegment[][] {
   const chunks: TranslationSegment[][] = [];
   let current: TranslationSegment[] = [];
@@ -175,7 +253,10 @@ export function chunkSegments(
 
   for (const segment of segments) {
     const length = segment.text.length;
-    if (current.length > 0 && currentChars + length > maxChars) {
+    if (
+      current.length > 0 &&
+      (currentChars + length > maxChars || current.length >= maxSegments)
+    ) {
       chunks.push(current);
       current = [];
       currentChars = 0;
@@ -194,6 +275,21 @@ function isCompleteChunk(
   if (output.length !== input.length) return false;
   const ids = new Set(input.map((segment) => segment.id));
   return output.every((segment) => ids.has(segment.id));
+}
+
+function toTranslationError(
+  error: unknown,
+  autoRetry: boolean,
+): TranslationError {
+  const providerError =
+    error instanceof ProviderCallError
+      ? error
+      : new ProviderCallError('invalid_response', String(error));
+  return {
+    kind: providerError.kind,
+    message: providerError.message,
+    retryable: isRetryable(providerError.kind, autoRetry),
+  };
 }
 
 function isRetryable(kind: TranslationErrorKind, autoRetry: boolean): boolean {
