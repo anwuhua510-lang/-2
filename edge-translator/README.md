@@ -26,6 +26,16 @@
 
 执行 `npm run zip`，把 `edge-translator.zip` 发给朋友。对方解压后按上面的第 3–5 步加载解压出的文件夹即可。**分发包不含任何 API key**，每个用户需要在扩展设置页填入自己的 key（M4 实现）。
 
+### .crx 安装（更接近"装软件"）
+
+执行 `npm run crx` 生成 `edge-ai-translator.crx`。朋友收到后：
+
+1. Edge 打开 `edge://extensions`，打开"开发人员模式"；
+2. 把 `.crx` 文件**拖进**该页面；
+3. 点击"确认安装"。
+
+注意：`.crx` 的扩展 ID 由签名密钥决定，密钥保存在本机 `edge-translator/.keys/`（不入库）。以后更新插件请用同一密钥重新打包（`npm run crx`），朋友需要先移除旧版本再安装新版本。
+
 ## 自定义 API endpoint（代理/转发）
 
 扩展默认只允许访问两个域名：`generativelanguage.googleapis.com` 与 `api.groq.com`。如果你使用自定义 endpoint，需要手动把它加入 `src/manifest.json` 的 `host_permissions`，然后重新 `npm run build`：
