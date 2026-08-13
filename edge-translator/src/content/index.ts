@@ -5,12 +5,11 @@
  * 进度展示 → 一键恢复原文。不做任何 API 请求。
  */
 import {
-  DEFAULT_SETTINGS,
-  type ExtensionSettings,
   type RuntimeMessage,
   type SegmentTranslation,
   type TranslationRequest,
 } from '../shared/types';
+import { getSettings } from '../shared/storage';
 import { extractBlocks, type ExtractedBlock } from './extract';
 import { TranslationBar } from './ui';
 
@@ -23,17 +22,6 @@ interface PageState {
 }
 
 let state: PageState | null = null;
-
-async function getSettings(): Promise<ExtensionSettings> {
-  const stored = await chrome.storage.local.get('settings');
-  const raw = stored.settings as Partial<ExtensionSettings> | undefined;
-  if (!raw) return DEFAULT_SETTINGS;
-  return {
-    ...DEFAULT_SETTINGS,
-    ...raw,
-    proxy: { ...DEFAULT_SETTINGS.proxy, ...(raw.proxy ?? {}) },
-  };
-}
 
 chrome.runtime.onMessage.addListener(
   (message: RuntimeMessage, _sender, sendResponse) => {
