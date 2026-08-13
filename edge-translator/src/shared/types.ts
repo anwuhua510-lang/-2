@@ -200,6 +200,6 @@ export const DEFAULT_ENDPOINTS = {
 } as const;
 
 export const DEFAULT_MODELS = {
-  gemini: 'gemini-2.5-flash',
+  gemini: 'gemini-3.6-flash',
   'openai-compatible': 'llama-3.3-70b-versatile',
 } as const;

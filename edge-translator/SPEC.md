@@ -99,7 +99,7 @@ interface ExtensionSettings {
 
 - 默认 endpoint：`https://generativelanguage.googleapis.com/v1beta`
 - 调用：`POST {baseUrl}/models/{model}:generateContent`，`?key={apiKey}`
-- 默认模型：`gemini-2.5-flash`；设置 `response_mime_type: "application/json"` 强制 JSON 输出。
+- 默认模型：`gemini-3.6-flash`（2026-07 发布，免费档可用）；设置 `response_mime_type: "application/json"` 强制 JSON 输出。
 
 ### 7.2 OpenAI 兼容（备用，默认指向 Groq）
 

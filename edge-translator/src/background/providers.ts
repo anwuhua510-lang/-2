@@ -185,6 +185,17 @@ async function classifyHttpError(response: Response): Promise<ProviderCallError>
     }
     return new ProviderCallError('auth_failed', `访问被拒绝（403）：${snippet}`);
   }
+  if (
+    status === 404 &&
+    (lower.includes('no longer available') ||
+      lower.includes('model not found') ||
+      lower.includes('not found'))
+  ) {
+    return new ProviderCallError(
+      'config_error',
+      '模型不存在或已下线，请到设置页把模型改为当前可用版本（Gemini 请用 gemini-3.6-flash）',
+    );
+  }
   if (status >= 500) {
     return new ProviderCallError('server_error', `服务端错误（${status}）`);
   }

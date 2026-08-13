@@ -105,7 +105,7 @@ function bindGlobalControls(): void {
   );
 
   document.getElementById('add-gemini')?.addEventListener('click', () => {
-    settings.providers.push(newProvider('gemini', 'Gemini', 'gemini-2.5-flash'));
+    settings.providers.push(newProvider('gemini', 'Gemini', 'gemini-3.6-flash'));
     renderProviders();
   });
   document.getElementById('add-openai')?.addEventListener('click', () => {
