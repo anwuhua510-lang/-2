@@ -10,14 +10,31 @@ chrome.runtime.onMessage.addListener(
   (message: RuntimeMessage, _sender, sendResponse) => {
     if (message?.type === 'INJECT_CONTENT') {
       const js = chrome.runtime.getManifest().content_scripts?.[0]?.js ?? [];
+      if (js.length === 0) {
+        sendResponse({ ok: false, error: 'manifest 中缺少 content script 文件' });
+        return false;
+      }
       chrome.scripting
         .executeScript({ target: { tabId: message.tabId }, files: js })
         .then(() => sendResponse({ ok: true }))
         .catch((error: unknown) => {
           const detail =
             error instanceof Error ? error.message : String(error);
+          let raw = '';
+          try {
+            raw = JSON.stringify(
+              error,
+              Object.getOwnPropertyNames(error as object),
+            );
+          } catch {
+            raw = String(error);
+          }
           console.error('[eat] content script injection failed:', error);
-          sendResponse({ ok: false, error: detail || 'injection failed' });
+          sendResponse({
+            ok: false,
+            error: detail || 'injection failed',
+            raw: raw.slice(0, 300),
+          });
         });
       return true;
     }

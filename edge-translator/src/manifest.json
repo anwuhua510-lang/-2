@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Edge AI 网页翻译",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "通过免费 AI 模型实现高质量整页翻译（英语/日语 → 中文）",
   "action": {
     "default_popup": "src/popup/index.html",

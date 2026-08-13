@@ -51,6 +51,13 @@ select {
   margin: 6px 0;
 }
 
+.version {
+  margin: 8px 0 0;
+  text-align: center;
+  color: #bbb;
+  font-size: 11px;
+}
+
 .primary {
   width: 100%;
   padding: 9px 0;

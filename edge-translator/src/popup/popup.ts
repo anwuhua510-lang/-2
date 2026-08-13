@@ -50,6 +50,11 @@ function bindControls(): void {
   document.getElementById('options-btn')?.addEventListener('click', () => {
     void chrome.runtime.openOptionsPage();
   });
+
+  const version = document.getElementById('popup-version');
+  if (version) {
+    version.textContent = `v${chrome.runtime.getManifest().version}`;
+  }
 }
 
 function render(): void {
@@ -137,18 +142,18 @@ async function restoreActiveTab(): Promise<void> {
 async function ensureContentScript(tabId: number): Promise<string | null> {
   if (await probeContentScript(tabId)) return null;
 
-  let response: { ok?: boolean; error?: string };
+  let response: { ok?: boolean; error?: string; raw?: string };
   try {
     response = (await chrome.runtime.sendMessage({
       type: 'INJECT_CONTENT',
       tabId,
-    })) as { ok?: boolean; error?: string };
+    })) as { ok?: boolean; error?: string; raw?: string };
   } catch {
     return '无法连接扩展后台，请刷新页面后重试。';
   }
 
   if (!response.ok) {
-    const error = response.error ?? '';
+    const error = response.error ?? response.raw ?? '';
     if (
       error.includes('Cannot access') ||
       error.includes('cannot be accessed') ||
@@ -156,7 +161,10 @@ async function ensureContentScript(tabId: number): Promise<string | null> {
     ) {
       return '当前页面不支持扩展（内置页面或受限页面），请换一个普通网页，或刷新后重试。';
     }
-    return `页面注入失败：${error || '未知错误'}。请刷新页面后重试。`;
+    if (!response.error && !response.raw) {
+      return `扩展响应异常（${JSON.stringify(response)}），请刷新扩展后重试。`;
+    }
+    return `页面注入失败：${error}。请刷新页面后重试。`;
   }
 
   // content script 通过动态 import 加载主模块，监听器注册有延迟；
