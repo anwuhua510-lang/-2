@@ -57,7 +57,8 @@ flowchart LR
 6. 页内顶部悬浮进度条："翻译中 12/45…"、失败原因、完成（完成后数秒自动消失；恢复原文通过弹窗操作）。
 7. 术语表：手动增删改 + JSON 导出/导入 + 内置示例词表（可删）。
 8. 隐私：仅用户主动点击才发起翻译；无持久缓存；页面内容只存在于当前页会话内存。
-9. 不做：流式输出、双语对照、划词翻译、iframe/PDF/SPA 动态内容监听（v2 候选）。
+9. 翻译缓存（页面会话内存，刷新即清空）：已翻译且显示译文时，按钮为"重新翻译"（清缓存后重新调用 AI）并显示"显示原文"（保留缓存）；已恢复原文时，按钮为"显示翻译"（直接应用缓存，不调用 AI）。
+10. 不做：流式输出、双语对照、划词翻译、iframe/PDF/SPA 动态内容监听（v2 候选）。
 
 ## 5. 配置与存储（chrome.storage.local）
 
@@ -93,6 +94,8 @@ interface ExtensionSettings {
 2. Service worker 按 `maxCharsPerRequest` 分块，逐块调 provider；每块完成发 `TRANSLATE_CHUNK`（内容脚本增量替换 DOM），同时发 `TRANSLATE_PROGRESS { done, total }`。
 3. 全部完成发 `TRANSLATE_DONE`；不可恢复的错误发 `TRANSLATE_FAILED`。
 4. Popup 通过 `POPUP_COMMAND`（`translate` / `restore` / `get-status`）与 content script 通信；content script 用 `CONTENT_STATUS` 应答。
+
+Popup 按钮状态机：无缓存 → "翻译本页"；有缓存且显示译文 → "重新翻译" + "显示原文"；有缓存且已恢复原文 → "显示翻译"（不调用 AI）。
 
 扩展重载后，已打开的标签页不会自动注入 content script。Popup 发送命令前会先探测 content script 是否存在；若不存在，通过 `INJECT_CONTENT` 消息让 background 用 `chrome.scripting` 动态注入（依赖点击扩展图标授予的 activeTab 权限），仍失败则在 popup 显示原因提示。
 

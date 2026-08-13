@@ -1,8 +1,13 @@
 /**
- * Content Script 入口（M3）。
+ * Content Script 入口（M3+）。
  *
  * 职责：提取文本块 → 发送 TRANSLATE_PAGE → 接收分块结果替换 DOM →
- * 进度展示 → 一键恢复原文。不做任何 API 请求。
+ * 进度展示 → 缓存管理（恢复原文 / 显示翻译 / 重新翻译）。
+ *
+ * 缓存语义：翻译结果保存在页面会话内存中（刷新页面即清空）。
+ * - restore：显示原文，保留缓存
+ * - show-translation：直接应用缓存，不调用 AI
+ * - retranslate：清空缓存后重新调用 AI
  */
 import {
   type RuntimeMessage,
@@ -13,15 +18,20 @@ import { getSettings } from '../shared/storage';
 import { extractBlocks, type ExtractedBlock } from './extract';
 import { TranslationBar } from './ui';
 
-interface PageState {
+interface TranslationCache {
   blocks: ExtractedBlock[];
-  applied: Set<string>;
-  bar: TranslationBar;
+  translations: Map<string, string>;
   truncated: boolean;
+}
+
+interface ActiveRun {
+  bar: TranslationBar;
   translating: boolean;
 }
 
-let state: PageState | null = null;
+let cache: TranslationCache | null = null;
+let activeRun: ActiveRun | null = null;
+let showingTranslation = false;
 
 const g = globalThis as { __eatInjected?: boolean };
 if (!g.__eatInjected) {
@@ -29,14 +39,27 @@ if (!g.__eatInjected) {
   chrome.runtime.onMessage.addListener(
     (message: RuntimeMessage, _sender, sendResponse) => {
       if (message.type === 'POPUP_COMMAND') {
-        if (message.command === 'translate') void handleTranslateCommand();
-        if (message.command === 'restore') restoreOriginal();
-        if (message.command === 'get-status') {
-          sendResponse({
-            type: 'CONTENT_STATUS',
-            translated: state !== null && state.applied.size > 0,
-          });
-          return false;
+        switch (message.command) {
+          case 'translate':
+            void startTranslation('fresh');
+            break;
+          case 'retranslate':
+            void startTranslation('retranslate');
+            break;
+          case 'show-translation':
+            showCachedTranslation();
+            break;
+          case 'restore':
+            restoreOriginal();
+            break;
+          case 'get-status':
+            sendResponse({
+              type: 'CONTENT_STATUS',
+              translated: cache !== null,
+              showingTranslation,
+              hasCache: cache !== null,
+            });
+            return false;
         }
         sendResponse({ received: message.command });
         return false;
@@ -46,26 +69,28 @@ if (!g.__eatInjected) {
         return false;
       }
       if (message.type === 'TRANSLATE_PROGRESS') {
-        state?.bar.update(message.done, message.total, message.providerName);
+        activeRun?.bar.update(
+          message.done,
+          message.total,
+          message.providerName,
+        );
         return false;
       }
       if (message.type === 'TRANSLATE_DONE') {
-        if (state) {
-          state.bar.complete(state.truncated);
-          state.translating = false;
-          const bar = state.bar;
-          // 完成 1 秒后淡出消失（恢复原文仍可在弹窗中操作）
+        if (activeRun) {
+          activeRun.bar.complete(cache?.truncated ?? false);
+          activeRun.translating = false;
+          const bar = activeRun.bar;
+          // 完成 1 秒后淡出消失（显示原文/显示翻译仍可在弹窗中操作）
           setTimeout(() => bar.fadeOut(), 1000);
         }
         return false;
       }
       if (message.type === 'TRANSLATE_FAILED') {
-        if (state) {
-          state.bar.fail(message.error);
-          state.bar.addButton('关闭', () => {
-            restoreOriginal();
-          });
-          state.translating = false;
+        if (activeRun) {
+          activeRun.bar.fail(message.error);
+          activeRun.bar.addButton('关闭', () => restoreOriginal());
+          activeRun.translating = false;
         }
         return false;
       }
@@ -74,14 +99,18 @@ if (!g.__eatInjected) {
   );
 }
 
-async function handleTranslateCommand(): Promise<void> {
-  if (state?.translating) return;
+async function startTranslation(
+  mode: 'fresh' | 'retranslate',
+): Promise<void> {
+  if (activeRun?.translating) return;
+  if (mode === 'retranslate') {
+    clearCacheAndRestore();
+  } else if (cache) {
+    return; // 已有缓存时忽略 fresh（弹窗此时应发送 retranslate）
+  }
 
   const settings = await getSettings();
-  if (!settings.masterEnabled) {
-    restoreOriginal();
-    return;
-  }
+  if (!settings.masterEnabled) return;
 
   const { blocks, truncated } = extractBlocks(
     document.body,
@@ -89,14 +118,10 @@ async function handleTranslateCommand(): Promise<void> {
   );
   if (blocks.length === 0) return;
 
-  state = {
-    blocks,
-    applied: new Set(),
-    bar: new TranslationBar(),
-    truncated,
-    translating: true,
-  };
-  state.bar.update(0, blocks.length, '准备中');
+  cache = { blocks, translations: new Map(), truncated };
+  showingTranslation = true;
+  activeRun = { bar: new TranslationBar(), translating: true };
+  activeRun.bar.update(0, blocks.length, '准备中');
 
   const request: TranslationRequest = {
     providerId: '',
@@ -112,38 +137,61 @@ async function handleTranslateCommand(): Promise<void> {
       request,
     } satisfies RuntimeMessage);
   } catch {
-    if (state) {
-      state.bar.fail({
+    if (activeRun) {
+      activeRun.bar.fail({
         kind: 'network',
         message: '无法连接扩展后台，请刷新页面后重试',
         retryable: false,
       });
-      state.translating = false;
+      activeRun.translating = false;
     }
   }
 }
 
 function applyChunk(segments: SegmentTranslation[]): void {
-  if (!state) return;
+  if (!cache) return;
   for (const segment of segments) {
-    if (state.applied.has(segment.id)) continue;
-    const block = state.blocks[Number(segment.id)];
+    if (cache.translations.has(segment.id)) continue;
+    cache.translations.set(segment.id, segment.text);
+    if (!showingTranslation) continue; // 已恢复原文：只缓存不显示
+    const block = cache.blocks[Number(segment.id)];
     if (!block) continue;
     block.nodes[0].nodeValue = segment.text;
     for (let i = 1; i < block.nodes.length; i++) {
       block.nodes[i].nodeValue = '';
     }
-    state.applied.add(segment.id);
   }
 }
 
+function showCachedTranslation(): void {
+  if (!cache) return;
+  for (const block of cache.blocks) {
+    const text = cache.translations.get(block.id);
+    if (text === undefined) continue;
+    block.nodes[0].nodeValue = text;
+    for (let i = 1; i < block.nodes.length; i++) {
+      block.nodes[i].nodeValue = '';
+    }
+  }
+  showingTranslation = true;
+}
+
 function restoreOriginal(): void {
-  if (!state) return;
-  for (const block of state.blocks) {
+  if (activeRun) {
+    activeRun.bar.remove();
+    activeRun = null;
+  }
+  if (!cache) return;
+  for (const block of cache.blocks) {
     block.nodes.forEach((node, index) => {
       node.nodeValue = block.original[index] ?? '';
     });
   }
-  state.bar.remove();
-  state = null;
+  showingTranslation = false;
+}
+
+function clearCacheAndRestore(): void {
+  restoreOriginal();
+  cache = null;
+  showingTranslation = false;
 }

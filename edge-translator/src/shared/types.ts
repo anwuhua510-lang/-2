@@ -162,15 +162,26 @@ export interface TranslateFailedMessage {
 }
 
 /** popup → content script：命令 */
+export type PopupCommand =
+  | 'translate' // 全新翻译（无缓存时）
+  | 'retranslate' // 清空缓存并重新翻译
+  | 'show-translation' // 应用缓存译文（不调用 AI）
+  | 'restore' // 显示原文（保留缓存）
+  | 'get-status';
+
 export interface PopupCommandMessage {
   type: 'POPUP_COMMAND';
-  command: 'translate' | 'restore' | 'get-status';
+  command: PopupCommand;
 }
 
 /** content script → popup：当前状态 */
 export interface ContentStatusMessage {
   type: 'CONTENT_STATUS';
   translated: boolean;
+  /** 当前页面是否正在显示译文 */
+  showingTranslation: boolean;
+  /** 页面会话内是否存在翻译缓存 */
+  hasCache: boolean;
   progress?: {
     done: number;
     total: number;
