@@ -156,7 +156,7 @@ async function ensureContentScript(tabId: number): Promise<string | null> {
     ) {
       return '当前页面不支持扩展（内置页面或受限页面），请换一个普通网页，或刷新后重试。';
     }
-    return `页面注入失败：${error}。请刷新页面后重试。`;
+    return `页面注入失败：${error || '未知错误'}。请刷新页面后重试。`;
   }
 
   // content script 通过动态 import 加载主模块，监听器注册有延迟；

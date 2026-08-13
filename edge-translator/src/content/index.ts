@@ -23,51 +23,56 @@ interface PageState {
 
 let state: PageState | null = null;
 
-chrome.runtime.onMessage.addListener(
-  (message: RuntimeMessage, _sender, sendResponse) => {
-  if (message.type === 'POPUP_COMMAND') {
-    if (message.command === 'translate') void handleTranslateCommand();
-    if (message.command === 'restore') restoreOriginal();
-    if (message.command === 'get-status') {
-      sendResponse({
-        type: 'CONTENT_STATUS',
-        translated: state !== null && state.applied.size > 0,
-      });
+const g = globalThis as { __eatInjected?: boolean };
+if (!g.__eatInjected) {
+  g.__eatInjected = true;
+  chrome.runtime.onMessage.addListener(
+    (message: RuntimeMessage, _sender, sendResponse) => {
+      if (message.type === 'POPUP_COMMAND') {
+        if (message.command === 'translate') void handleTranslateCommand();
+        if (message.command === 'restore') restoreOriginal();
+        if (message.command === 'get-status') {
+          sendResponse({
+            type: 'CONTENT_STATUS',
+            translated: state !== null && state.applied.size > 0,
+          });
+          return false;
+        }
+        sendResponse({ received: message.command });
+        return false;
+      }
+      if (message.type === 'TRANSLATE_CHUNK') {
+        applyChunk(message.segments);
+        return false;
+      }
+      if (message.type === 'TRANSLATE_PROGRESS') {
+        state?.bar.update(message.done, message.total, message.providerName);
+        return false;
+      }
+      if (message.type === 'TRANSLATE_DONE') {
+        if (state) {
+          state.bar.complete(state.truncated);
+          state.translating = false;
+          const bar = state.bar;
+          // 完成后短暂展示，数秒后自动关闭（恢复原文仍可在弹窗中操作）
+          setTimeout(() => bar.remove(), 3000);
+        }
+        return false;
+      }
+      if (message.type === 'TRANSLATE_FAILED') {
+        if (state) {
+          state.bar.fail(message.error);
+          state.bar.addButton('关闭', () => {
+            restoreOriginal();
+          });
+          state.translating = false;
+        }
+        return false;
+      }
       return false;
-    }
-    sendResponse({ received: message.command });
-    return;
-  }
-  if (message.type === 'TRANSLATE_CHUNK') {
-    applyChunk(message.segments);
-    return;
-  }
-  if (message.type === 'TRANSLATE_PROGRESS') {
-    state?.bar.update(message.done, message.total, message.providerName);
-    return;
-  }
-  if (message.type === 'TRANSLATE_DONE') {
-    if (state) {
-      state.bar.complete(state.truncated);
-      state.translating = false;
-      const bar = state.bar;
-      // 完成后短暂展示，数秒后自动关闭（恢复原文仍可在弹窗中操作）
-      setTimeout(() => bar.remove(), 3000);
-    }
-    return;
-  }
-  if (message.type === 'TRANSLATE_FAILED') {
-    if (state) {
-      state.bar.fail(message.error);
-      state.bar.addButton('关闭', () => {
-        restoreOriginal();
-      });
-      state.translating = false;
-    }
-  }
-  return false;
-  },
-);
+    },
+  );
+}
 
 async function handleTranslateCommand(): Promise<void> {
   if (state?.translating) return;

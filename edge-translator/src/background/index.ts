@@ -13,8 +13,11 @@ chrome.runtime.onMessage.addListener(
       chrome.scripting
         .executeScript({ target: { tabId: message.tabId }, files: js })
         .then(() => sendResponse({ ok: true }))
-        .catch((error) => {
-          sendResponse({ ok: false, error: String(error) });
+        .catch((error: unknown) => {
+          const detail =
+            error instanceof Error ? error.message : String(error);
+          console.error('[eat] content script injection failed:', error);
+          sendResponse({ ok: false, error: detail || 'injection failed' });
         });
       return true;
     }
