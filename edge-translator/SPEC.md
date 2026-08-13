@@ -94,6 +94,8 @@ interface ExtensionSettings {
 3. 全部完成发 `TRANSLATE_DONE`；不可恢复的错误发 `TRANSLATE_FAILED`。
 4. Popup 通过 `POPUP_COMMAND`（`translate` / `restore` / `get-status`）与 content script 通信；content script 用 `CONTENT_STATUS` 应答。
 
+扩展重载后，已打开的标签页不会自动注入 content script。Popup 发送命令前会先探测 content script 是否存在；若不存在，通过 `INJECT_CONTENT` 消息让 background 用 `chrome.scripting` 动态注入（依赖点击扩展图标授予的 activeTab 权限），仍失败则在 popup 显示原因提示。
+
 ## 7. API 集成
 
 ### 7.1 Gemini（优先）

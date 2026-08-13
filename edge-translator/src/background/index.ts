@@ -8,6 +8,16 @@ import { handleTranslatePage } from './translate';
 
 chrome.runtime.onMessage.addListener(
   (message: RuntimeMessage, _sender, sendResponse) => {
+    if (message?.type === 'INJECT_CONTENT') {
+      const js = chrome.runtime.getManifest().content_scripts?.[0]?.js ?? [];
+      chrome.scripting
+        .executeScript({ target: { tabId: message.tabId }, files: js })
+        .then(() => sendResponse({ ok: true }))
+        .catch((error) => {
+          sendResponse({ ok: false, error: String(error) });
+        });
+      return true;
+    }
     if (message?.type === 'TRANSLATE_PAGE') {
       const tabId = _sender.tab?.id;
       if (tabId === undefined) {

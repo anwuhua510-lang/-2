@@ -24,7 +24,7 @@ function bindControls(): void {
   master.addEventListener('change', async () => {
     settings.masterEnabled = master.checked;
     await persist();
-    if (!master.checked) sendToActiveTab({ type: 'POPUP_COMMAND', command: 'restore' });
+    if (!master.checked) void restoreActiveTab();
   });
 
   const source = document.getElementById('source-language') as HTMLSelectElement;
@@ -40,12 +40,11 @@ function bindControls(): void {
   });
 
   document.getElementById('translate-btn')?.addEventListener('click', () => {
-    if (!settings.masterEnabled) return;
-    sendToActiveTab({ type: 'POPUP_COMMAND', command: 'translate' });
+    void translateActiveTab();
   });
 
   document.getElementById('restore-btn')?.addEventListener('click', () => {
-    sendToActiveTab({ type: 'POPUP_COMMAND', command: 'restore' });
+    void restoreActiveTab();
   });
 
   document.getElementById('options-btn')?.addEventListener('click', () => {
@@ -95,16 +94,73 @@ async function queryTabStatus(): Promise<ContentStatusMessage | undefined> {
   }
 }
 
-function sendToActiveTab(message: PopupCommandMessage): void {
-  void (async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return;
+async function translateActiveTab(): Promise<void> {
+  hideHint();
+  const tabId = await getActiveTabId();
+  if (tabId === undefined) return;
+  if (!(await ensureContentScript(tabId))) {
+    showHint('当前页面无法翻译：请刷新页面后重试（部分内置页面不支持扩展）。');
+    return;
+  }
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: 'POPUP_COMMAND',
+      command: 'translate',
+    } satisfies PopupCommandMessage);
+  } catch {
+    showHint('翻译指令发送失败，请刷新页面后重试。');
+  }
+}
+
+async function restoreActiveTab(): Promise<void> {
+  const tabId = await getActiveTabId();
+  if (tabId === undefined) return;
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: 'POPUP_COMMAND',
+      command: 'restore',
+    } satisfies PopupCommandMessage);
+  } catch {
+    // 页面未注入 content script 时无需恢复
+  }
+}
+
+/**
+ * 确保 content script 已注入：先探测，失败则请求 background 用
+ * chrome.scripting 动态注入（依赖点击扩展图标授予的 activeTab 权限）。
+ */
+async function ensureContentScript(tabId: number): Promise<boolean> {
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: 'POPUP_COMMAND',
+      command: 'get-status',
+    } satisfies PopupCommandMessage);
+    return true;
+  } catch {
     try {
-      await chrome.tabs.sendMessage(tab.id, message);
+      await chrome.runtime.sendMessage({ type: 'INJECT_CONTENT', tabId });
+      return true;
     } catch {
-      // 受限页面或 content script 未注入：忽略
+      return false;
     }
-  })();
+  }
+}
+
+async function getActiveTabId(): Promise<number | undefined> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab?.id;
+}
+
+function showHint(message: string): void {
+  const hint = document.getElementById('popup-hint');
+  if (!hint) return;
+  hint.textContent = message;
+  hint.hidden = false;
+}
+
+function hideHint(): void {
+  const hint = document.getElementById('popup-hint');
+  if (hint) hint.hidden = true;
 }
 
 async function persist(): Promise<void> {

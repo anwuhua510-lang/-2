@@ -45,6 +45,12 @@ select {
   margin: 4px 0 10px;
 }
 
+.hint.error {
+  color: #dc2626;
+  font-size: 12px;
+  margin: 6px 0;
+}
+
 .primary {
   width: 100%;
   padding: 9px 0;

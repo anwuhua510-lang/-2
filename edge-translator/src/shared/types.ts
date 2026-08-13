@@ -184,6 +184,12 @@ export interface SettingsUpdatedMessage {
   settings: ExtensionSettings;
 }
 
+/** popup → background：确保 content script 已注入指定标签页 */
+export interface InjectContentMessage {
+  type: 'INJECT_CONTENT';
+  tabId: number;
+}
+
 export type RuntimeMessage =
   | TranslatePageMessage
   | TranslateChunkMessage
@@ -192,7 +198,8 @@ export type RuntimeMessage =
   | TranslateFailedMessage
   | PopupCommandMessage
   | ContentStatusMessage
-  | SettingsUpdatedMessage;
+  | SettingsUpdatedMessage
+  | InjectContentMessage;
 
 // ========== API 默认值（M2 使用） ==========
 
