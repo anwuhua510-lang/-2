@@ -177,6 +177,17 @@ async function classifyHttpError(response: Response): Promise<ProviderCallError>
   const snippet = body.slice(0, 200);
 
   if (status === 429) {
+    if (
+      lower.includes('tokens per day') ||
+      lower.includes('tokens/day') ||
+      lower.includes('tpd') ||
+      lower.includes('quota')
+    ) {
+      return new ProviderCallError(
+        'quota_exhausted',
+        `今日免费额度已用尽：${snippet}`,
+      );
+    }
     return new ProviderCallError('rate_limited', `限流（429）：${snippet}`);
   }
   if (status === 401) {

@@ -38,7 +38,15 @@
 
 ## 自定义 API endpoint（代理/转发）
 
-扩展默认只允许访问两个域名：`generativelanguage.googleapis.com` 与 `api.groq.com`。如果你使用自定义 endpoint，需要手动把它加入 `src/manifest.json` 的 `host_permissions`，然后重新 `npm run build`：
+扩展默认已授权以下免费服务域名，直接可用：
+
+- `generativelanguage.googleapis.com`（Gemini）
+- `api.groq.com`（Groq）
+- `api.cerebras.ai`（Cerebras，免费 100 万 token/天）
+- `openrouter.ai/api`（OpenRouter 免费模型）
+- `api.deepseek.com`（DeepSeek）
+
+如果使用其它自定义 endpoint，需要手动把它加入 `src/manifest.json` 的 `host_permissions`，然后重新 `npm run build`：
 
 ```json
 "host_permissions": [

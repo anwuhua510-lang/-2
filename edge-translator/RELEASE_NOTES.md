@@ -1,11 +1,16 @@
-# v0.1.3
+# v0.1.4
 
 Edge AI 网页翻译扩展（英语 / 日语 → 中文）
+
+## 本版更新
+
+- 新增免费引擎：Cerebras（每天 100 万 token，是 Groq 的 10 倍）、OpenRouter、DeepSeek，均内置访问权限，设置页直接添加即可
+- 优化额度用尽提示：Groq 每日额度用完时显示明确中文提示，并自动尝试备用引擎
 
 ## 功能
 
 - 整页翻译，手动触发，默认不自动翻译
-- 多引擎：Groq（推荐）/ Gemini / 任意 OpenAI 兼容接口，额度用尽自动轮换
+- 多引擎：Groq / Cerebras / Gemini / OpenRouter / DeepSeek / 任意 OpenAI 兼容接口，额度用尽自动轮换
 - 术语表：手动维护 + JSON 导入导出 + 示例词表
 - 页面翻译缓存：显示原文后可一键"显示翻译"复用缓存，不消耗 API 额度
 - 翻译进度条、完成自动淡出、一键显示原文
@@ -21,6 +26,7 @@ Edge AI 网页翻译扩展（英语 / 日语 → 中文）
 打开扩展设置，添加自己的 API key：
 
 - Groq：https://console.groq.com 免费注册，模型 `llama-3.3-70b-versatile`
+- Cerebras（推荐，额度大）：https://cloud.cerebras.ai 免费注册，模型 `llama-3.3-70b`
 - 或 Gemini：https://aistudio.google.com 免费 key，模型 `gemini-3.6-flash`（部分地区可能被拒）
 
 > 分发包不含任何 API key，每个用户需在设置中填写自己的 key。
